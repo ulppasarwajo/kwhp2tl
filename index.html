@@ -1,0 +1,2108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Monitoring Pencapaian kWh P2TL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Library untuk membaca file Excel di browser -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <!-- HEADER -->
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl shadow-md">
+                    <i class="fa-solid font-bold text-xl fa-bolt text-yellow-300"></i>
+                </div>
+                <div>
+                    <h1 id="dashboardTitle" class="text-lg font-bold leading-tight tracking-wide">MONITORING PENCAPAIAN kWh P2TL</h1>
+                    <p class="text-xs text-slate-400 font-medium">PT PLN (PERSERO) ULP PASARWAJO</p>
+                </div>
+            </div>
+
+<!-- TOMBOL UPLOAD EXCEL -->
+<div class="flex items-center space-x-2 border-l border-slate-600 pl-4">
+  <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFileUpload(event)">
+  <label for="excelFile" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded cursor-pointer transition flex items-center space-x-1">
+    <span>📂 Upload TS AP2T</span>
+  </label>
+</div>
+
+            <div class="flex flex-wrap items-center gap-2 bg-slate-800/80 p-1.5 rounded-xl border border-slate-700">
+                <div class="flex items-center space-x-1 pl-2 pr-1">
+                    <i class="fa-regular fa-calendar text-slate-400 text-xs"></i>
+                    <select id="filterTahun" onchange="onYearChange()" class="bg-transparent text-xs font-semibold text-amber-300 focus:outline-none cursor-pointer">
+                        <option value="2025" class="bg-slate-800 text-white">2025</option>
+                        <option value="2026" class="bg-slate-800 text-white">2026</option>
+                        <option value="2027" class="bg-slate-800 text-white">2027</option>
+                    </select>
+                </div>
+                
+                <div class="flex items-center space-x-1 pl-2 border-l border-slate-700">
+                    <select id="filterUnit" onchange="renderDashboard()" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer">
+                        <option value="ALL" class="bg-slate-800">TOTAL</option>
+                        <option value="PASARWAJO" class="bg-slate-800">PASARWAJO</option>
+                    </select>
+                </div>
+
+                <button onclick="fetchDataFromServer()" title="Refresh Data" class="bg-blue-600 hover:bg-blue-500 text-white p-1.5 rounded-lg text-xs font-semibold transition ml-1 flex items-center justify-center">
+                    <i class="fa-solid fa-rotate" id="refresh-icon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+
+        <!-- TAB NAVIGATION -->
+        <div class="flex overflow-x-auto custom-scrollbar border-b border-slate-200 pb-2 gap-2">
+            <button onclick="setMode('harian')" id="tab-harian" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-blue-600 text-white shadow-sm">
+                <i class="fa-solid fa-calendar-day"></i> Filter Harian
+            </button>
+            <button onclick="setMode('matriks')" id="tab-matriks" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-table-cells"></i> Matriks Bulanan
+            </button>
+            <button onclick="setMode('range')" id="tab-range" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-calendar-week"></i> Range Bulan
+            </button>
+            <button onclick="setMode('lm')" id="tab-lm" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-chart-line"></i> Realisasi LM (Mingguan)
+            </button>
+            <button onclick="setMode('pju')" id="tab-pju" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-lightbulb"></i> PJU & NON PJU
+            </button>
+            <button onclick="setMode('pk')" id="tab-pk" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-users-viewfinder"></i> Realisasi P & K
+            </button>
+            <button onclick="setMode('textreport')" id="tab-textreport" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300">
+                <i class="fa-solid fa-file-lines"></i> Text Report WA
+            </button>
+        </div>
+
+
+        <!-- CONTAINER FILTER -->
+        <div id="tab-month-container" class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
+            
+            <div id="container-filter-bulan-tunggal" class="flex items-center gap-2">
+                <label for="filterBulan" class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                    <i class="fa-solid fa-filter text-blue-600"></i> Pilih Bulan:
+                </label>
+                <select id="filterBulan" onchange="renderDashboard()" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                    <option value="1">Januari</option>
+                    <option value="2">Februari</option>
+                    <option value="3">Maret</option>
+                    <option value="4">April</option>
+                    <option value="5">Mei</option>
+                    <option value="6">Juni</option>
+                    <option value="7">Juli</option>
+                    <option value="8">Agustus</option>
+                    <option value="9">September</option>
+                    <option value="10">Oktober</option>
+                    <option value="11">November</option>
+                    <option value="12">Desember</option>
+                </select>
+            </div>
+
+            <div id="container-filter-hari" class="flex items-center gap-2 pl-4 border-l border-slate-200">
+                <label for="filterHari" class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                    <i class="fa-regular fa-calendar-check text-blue-600"></i> Pilih Tanggal:
+                </label>
+                <select id="filterHari" onchange="renderDashboard()" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                    <option value="ALL">Semua Hari (Akumulasi Bulan)</option>
+                </select>
+            </div>
+
+            <div id="container-filter-range" class="hidden flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label for="filterBulanAwal" class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                        <i class="fa-solid fa-calendar-minus text-blue-600"></i> Bulan Awal:
+                    </label>
+                    <select id="filterBulanAwal" onchange="onRangeChange()" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                        <option value="1">Januari</option>
+                        <option value="2">Februari</option>
+                        <option value="3">Maret</option>
+                        <option value="4">April</option>
+                        <option value="5">Mei</option>
+                        <option value="6">Juni</option>
+                        <option value="7">Juli</option>
+                        <option value="8">Agustus</option>
+                        <option value="9">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12">Desember</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2 pl-4 border-l border-slate-200">
+                    <label for="filterBulanAkhir" class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                        <i class="fa-solid fa-calendar-plus text-blue-600"></i> Bulan Akhir:
+                    </label>
+                    <select id="filterBulanAkhir" onchange="onRangeChange()" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer">
+                        <option value="1">Januari</option>
+                        <option value="2">Februari</option>
+                        <option value="3">Maret</option>
+                        <option value="4">April</option>
+                        <option value="5">Mei</option>
+                        <option value="6">Juni</option>
+                        <option value="7">Juli</option>
+                        <option value="8">Agustus</option>
+                        <option value="9">September</option>
+                        <option value="10">Oktober</option>
+                        <option value="11">November</option>
+                        <option value="12" selected>Desember</option>
+                    </select>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- KPI CARDS -->
+        <div id="kpi-cards-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span id="kpi-box-title-1" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Target kWh</span>
+                    <div id="kpi-box-icon-1" class="bg-blue-100 text-blue-600 p-2 rounded-lg text-xs"><i class="fa-solid fa-bullseye"></i></div>
+                </div>
+                <div id="kpi-target" class="text-xl font-extrabold text-slate-900 mt-2">0</div>
+                <p id="kpi-box-desc-1" class="text-[10px] text-slate-400 mt-1">Target KM</p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span id="kpi-box-title-2" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Realisasi kWh</span>
+                    <div id="kpi-box-icon-2" class="bg-emerald-100 text-emerald-600 p-2 rounded-lg text-xs"><i class="fa-solid fa-square-check"></i></div>
+                </div>
+                <div id="kpi-realisasi" class="text-xl font-extrabold text-emerald-600 mt-2">0</div>
+                <p id="kpi-box-desc-2" class="text-[10px] text-slate-400 mt-1">Total Energi Teramankan</p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span id="kpi-box-title-3" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gap / Selisih</span>
+                    <div id="kpi-gap-icon" class="bg-rose-100 text-rose-600 p-2 rounded-lg text-xs"><i class="fa-solid fa-arrow-trend-down"></i></div>
+                </div>
+                <div id="kpi-gap" class="text-xl font-extrabold text-rose-600 mt-2">0</div>
+                <p id="kpi-box-desc-3" class="text-[10px] text-slate-400 mt-1">Realisasi vs Target</p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <span id="kpi-box-title-4" class="text-xs font-bold text-slate-500 uppercase tracking-wider">PENCAPAIAN (%)</span>
+                    <div id="kpi-box-icon-4" class="bg-purple-100 text-purple-600 p-2 rounded-lg text-xs"><i class="fa-solid fa-percent"></i></div>
+                </div>
+                <div id="kpi-percentage" class="text-xl font-extrabold text-purple-600 mt-2">0%</div>
+                <p id="kpi-box-desc-4" class="text-[10px] text-slate-400 mt-1">Persentase Perolehan</p>
+            </div>
+        </div>
+
+        <!-- VISUALISASI CHART -->
+        <div id="chart-section-container" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-chart-column text-blue-600"></i> Visualisasi Data
+                </h2>
+            </div>
+            <div class="h-64 sm:h-80 w-full">
+                <canvas id="p2tlChart"></canvas>
+            </div>
+        </div>
+
+        <!-- TABEL DATA UTAMA -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" id="main-table-container">
+            <div class="p-4 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <h2 id="table-title" class="text-sm font-bold text-slate-800 uppercase tracking-wider">Tabel Data</h2>
+                <button onclick="exportCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-excel"></i> Export Excel/CSV
+                </button>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+                <!-- Catatan: Perhatikan tabel menggunakan class 'normal' agar tidak whitespace-nowrap mutlak di thead -->
+                <table class="w-full text-left border-collapse" id="main-table">
+                    <thead id="table-head" class="bg-slate-100 text-slate-700 text-xs font-bold border-b border-slate-200">
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-100 text-xs">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CONTAINER REALISASI LM MINGGUAN -->
+        <div id="lm-tables-container" class="hidden space-y-6">
+
+            <!-- RANGE PENGATURAN HARIAN -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs font-bold text-teal-800 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-teal-600"></i> Pengaturan Range Tanggal LM Mingguan
+                    </h3>
+                    <button onclick="resetDefaultLmRange()" class="text-xs font-bold text-teal-700 hover:text-teal-900 underline">
+                        Reset Ke Default Minggu
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="bg-teal-50 border border-teal-200 p-2.5 rounded-lg">
+                        <label class="block text-xs font-bold text-teal-900 mb-1">Minggu 1 (M1)</label>
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="lm_m1_start" value="1" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                            <span class="text-xs text-slate-500 font-bold">s/d</span>
+                            <input type="number" id="lm_m1_end" value="7" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                        </div>
+                    </div>
+                    <div class="bg-teal-50 border border-teal-200 p-2.5 rounded-lg">
+                        <label class="block text-xs font-bold text-teal-900 mb-1">Minggu 2 (M2)</label>
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="lm_m2_start" value="8" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                            <span class="text-xs text-slate-500 font-bold">s/d</span>
+                            <input type="number" id="lm_m2_end" value="14" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                        </div>
+                    </div>
+                    <div class="bg-teal-50 border border-teal-200 p-2.5 rounded-lg">
+                        <label class="block text-xs font-bold text-teal-900 mb-1">Minggu 3 (M3)</label>
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="lm_m3_start" value="15" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                            <span class="text-xs text-slate-500 font-bold">s/d</span>
+                            <input type="number" id="lm_m3_end" value="21" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                        </div>
+                    </div>
+                    <div class="bg-teal-50 border border-teal-200 p-2.5 rounded-lg">
+                        <label class="block text-xs font-bold text-teal-900 mb-1">Minggu 4 (M4)</label>
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="lm_m4_start" value="22" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                            <span class="text-xs text-slate-500 font-bold">s/d</span>
+                            <input type="number" id="lm_m4_end" value="31" onchange="renderDashboard()" class="w-full text-center text-xs font-bold bg-white border border-slate-300 rounded p-1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MATRIKS LM MINGGUAN -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-teal-800 text-white flex justify-between items-center">
+                    <h3 class="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-table"></i> Tabel Matriks Realisasi LM Mingguan
+                    </h3>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse whitespace-nowrap text-xs">
+                        <thead class="bg-teal-900 text-white font-bold">
+                            <tr>
+                                <th rowspan="2" class="px-2 py-2 border-r border-teal-700 text-left w-24">ULP</th>
+                                <th rowspan="2" class="px-2 py-2 border-r border-teal-700 text-right whitespace-normal w-20">TARGET BULAN</th>
+                                <th rowspan="2" class="px-2 py-2 border-r border-teal-700 text-right whitespace-normal w-20">TARGET MINGGU</th>
+                                <th colspan="3" id="th-lm-m1" class="px-2 py-1.5 border-r border-teal-700 text-center bg-teal-800">M1</th>
+                                <th colspan="4" id="th-lm-m2" class="px-2 py-1.5 border-r border-teal-700 text-center bg-teal-800/80">M2</th>
+                                <th colspan="4" id="th-lm-m3" class="px-2 py-1.5 border-r border-teal-700 text-center bg-teal-800">M3</th>
+                                <th colspan="4" id="th-lm-m4" class="px-2 py-1.5 border-r border-teal-700 text-center bg-teal-800/80">M4</th>
+                                <th rowspan="2" class="px-2 py-2 border-r border-teal-700 text-right bg-emerald-700 whitespace-normal w-20">TOTAL REALISASI</th>
+                                <th rowspan="2" class="px-2 py-2 text-right bg-emerald-700 whitespace-normal w-16">% CAPAI</th>
+                            </tr>
+                            <tr class="text-[11px] bg-teal-950 text-slate-200 text-center">
+                                <th class="px-1.5 py-1 border-r border-teal-800">REAL</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800">% M1</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-rose-300">GAP M1</th>
+                                
+                                <th class="px-1.5 py-1 border-r border-teal-800">REAL</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800">% M2</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-rose-300">GAP M2</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-amber-300">GAP CARRY M2</th>
+                                
+                                <th class="px-1.5 py-1 border-r border-teal-800">REAL</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800">% M3</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-rose-300">GAP M3</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-amber-300">GAP CARRY M3</th>
+                                
+                                <th class="px-1.5 py-1 border-r border-teal-800">REAL</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800">% M4</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-rose-300">GAP M4</th>
+                                <th class="px-1.5 py-1 border-r border-teal-800 text-amber-300">GAP CARRY M4</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrixLmTableBody" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- DETAIL HARIAN MINGGUAN -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-slate-800 text-white flex justify-between items-center">
+                    <h3 id="m1-table-title" class="text-xs font-bold uppercase tracking-wider">MINGGU 1</h3>
+                    <span id="m1-month-label" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded font-bold"></span>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse whitespace-nowrap"><thead id="m1-head"></thead><tbody id="m1-body"></tbody></table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-slate-800 text-white flex justify-between items-center">
+                    <h3 id="m2-table-title" class="text-xs font-bold uppercase tracking-wider">MINGGU 2</h3>
+                    <span id="m2-month-label" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded font-bold"></span>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse whitespace-nowrap"><thead id="m2-head"></thead><tbody id="m2-body"></tbody></table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-slate-800 text-white flex justify-between items-center">
+                    <h3 id="m3-table-title" class="text-xs font-bold uppercase tracking-wider">MINGGU 3</h3>
+                    <span id="m3-month-label" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded font-bold"></span>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse whitespace-nowrap"><thead id="m3-head"></thead><tbody id="m3-body"></tbody></table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-3 bg-slate-800 text-white flex justify-between items-center">
+                    <h3 id="m4-table-title" class="text-xs font-bold uppercase tracking-wider">MINGGU 4</h3>
+                    <span id="m4-month-label" class="text-[10px] bg-slate-700 px-2 py-0.5 rounded font-bold"></span>
+                </div>
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse whitespace-nowrap"><thead id="m4-head"></thead><tbody id="m4-body"></tbody></table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTAINER HARIAN PJU NON PJU -->
+        <div id="pju-daily-container" class="hidden space-y-6">
+            
+            <!-- Kontainer Tabel PJU Harian -->
+            <div class="bg-white rounded-xl border border-slate-700 shadow-xl overflow-hidden">
+                <div class="px-4 py-3 bg-[#1e232a] text-white flex justify-between items-center border-b border-slate-700">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-100">REALISASI HARIAN - PJU</h3>
+                    <span class="text-[11px] bg-[#27303f] text-slate-200 font-semibold px-3 py-1 rounded-md border border-slate-600">🚦</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead id="pju-table-head" class="bg-[#f1f5f9] text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200"></thead>
+                        <tbody id="pju-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
+                        <tfoot id="pju-table-foot"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Kontainer Tabel NON PJU Harian -->
+            <div class="bg-white rounded-xl border border-slate-700 shadow-xl overflow-hidden">
+                <div class="px-4 py-3 bg-[#1e232a] text-white flex justify-between items-center border-b border-slate-700">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-100">REALISASI HARIAN - NON PJU</h3>
+                    <span class="text-[11px] bg-[#27303f] text-slate-200 font-semibold px-3 py-1 rounded-md border border-slate-600">💡</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead id="non-pju-table-head" class="bg-[#f1f5f9] text-slate-700 font-bold uppercase tracking-wider border-b border-slate-200"></thead>
+                        <tbody id="non-pju-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
+                        <tfoot id="non-pju-table-foot"></tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTAINER TEXT REPORT WA -->
+        <div id="text-report-container" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-file-lines text-emerald-600"></i> Generator Text Report WhatsApp Executive
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-1">Pilih bulan dan tanggal realisasi, lalu klik Generate Report untuk menyusun format otomatis.</p>
+                    </div>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-xs font-bold text-slate-600">Bulan Realisasi:</label>
+                            <select id="reportBulan" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
+                                <option value="1">Januari</option>
+                                <option value="2">Februari</option>
+                                <option value="3">Maret</option>
+                                <option value="4">April</option>
+                                <option value="5">Mei</option>
+                                <option value="6">Juni</option>
+                                <option value="7">Juli</option>
+                                <option value="8">Agustus</option>
+                                <option value="9" selected>September</option>
+                                <option value="10">Oktober</option>
+                                <option value="11">November</option>
+                                <option value="12">Desember</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-xs font-bold text-slate-600">Tanggal Realisasi:</label>
+                            <select id="reportTanggal" class="bg-slate-100 text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
+                                <!-- Generated via JS -->
+                            </select>
+                        </div>
+                        <button onclick="generateTextReport()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-slate-700 uppercase tracking-wider">Hasil Text Report:</label>
+                        <div class="flex items-center gap-2">
+                            <button onclick="copyTextReport()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-copy"></i> Copy Text
+                            </button>
+                            <button onclick="sendWhatsAppReport()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+                                <i class="fa-brands fa-whatsapp text-sm"></i> Send WA
+                            </button>
+                        </div>
+                    </div>
+                    <textarea id="reportOutput" rows="14" class="w-full p-4 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none custom-scrollbar" placeholder="Klik 'Generate Report' untuk menampilkan laporan..."></textarea>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxXIA_dq27pLeN3a9WydVAI3sa8WOEpj7nJXzrsF7zRb4XRuM5CgSMCC0r6UEzRFsSp/exec"; 
+        
+        let selectedYear = "2026"; 
+        let cacheKey = `p2tl_dashboard_cache_${selectedYear}`;
+
+        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        const unitsList = ["PASARWAJO"];
+
+        let dbP2TL = [];
+        let currentMode = 'harian';
+        let p2tlChartInstance = null;
+        let currentSortColumn = null;
+        let isAscending = true;
+
+        const filterBulanEl = document.getElementById('filterBulan');
+        const filterHariEl = document.getElementById('filterHari');
+        const filterBulanAwalEl = document.getElementById('filterBulanAwal');
+        const filterBulanAkhirEl = document.getElementById('filterBulanAkhir');
+        const filterUnitEl = document.getElementById('filterUnit');
+        const filterTahunEl = document.getElementById('filterTahun');
+
+        const containerBulanTunggal = document.getElementById('container-filter-bulan-tunggal');
+        const containerFilterHari = document.getElementById('container-filter-hari');
+        const containerFilterRange = document.getElementById('container-filter-range');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initHariDropdown();
+            initReportTanggalDropdown();
+            if (filterTahunEl) filterTahunEl.value = selectedYear;
+            if (filterBulanEl) filterBulanEl.value = (new Date().getMonth() + 1).toString();
+            
+	    // --- AUTO SELECT H-1 UNTUK TEXT REPORT ---
+            setReportDefaultToYesterday();
+            // ------------------------------------------
+
+            initChart();
+            loadCachedDataFirst();
+        });
+
+	// Fungsi untuk mengatur Bulan dan Tanggal default ke H-1 dari hari ini
+	function setReportDefaultToYesterday() {
+ 	   const today = new Date();
+	    // Kurangi 1 hari (H-1)
+	    today.setDate(today.getDate() - 1);
+
+ 	   const targetBulan = today.getMonth() + 1; // Bulan (1-12)
+ 	   const targetTanggal = today.getDate();    // Tanggal (1-31)
+
+ 	   const reportBulanEl = document.getElementById('reportBulan');
+ 	   const reportTanggalEl = document.getElementById('reportTanggal');
+
+ 	   if (reportBulanEl) reportBulanEl.value = targetBulan.toString();
+  	   if (reportTanggalEl) reportTanggalEl.value = targetTanggal.toString();
+	}
+
+        function initHariDropdown() {
+            if (!filterHariEl) return;
+            filterHariEl.innerHTML = `<option value="ALL">Semua Hari (Akumulasi Bulan)</option>`;
+            for (let i = 1; i <= 31; i++) {
+                const opt = document.createElement('option');
+                opt.value = i.toString();
+                opt.innerText = `Tanggal ${i}`;
+                filterHariEl.appendChild(opt);
+            }
+        }
+
+        function initReportTanggalDropdown() {
+            const reportTanggalEl = document.getElementById('reportTanggal');
+            if (!reportTanggalEl) return;
+            reportTanggalEl.innerHTML = '';
+            for (let i = 1; i <= 31; i++) {
+                const opt = document.createElement('option');
+                opt.value = i.toString();
+                opt.innerText = `Tanggal ${i}`;
+                if (i === 4) opt.selected = true; // Default tgl 4 sesuai contoh
+                reportTanggalEl.appendChild(opt);
+            }
+        }
+
+        function onYearChange() {
+            if (filterTahunEl) selectedYear = filterTahunEl.value;
+            cacheKey = `p2tl_dashboard_cache_${selectedYear}`;
+
+            const titleEl = document.getElementById('dashboardTitle');
+            if (titleEl) titleEl.innerText = `MONITORING PENCAPAIAN kWh P2TL TAHUN ${selectedYear}`;
+
+            loadCachedDataFirst();
+        }
+
+        function onRangeChange() {
+            let start = parseInt(filterBulanAwalEl.value);
+            let end = parseInt(filterBulanAkhirEl.value);
+
+            if (start > end) {
+                filterBulanAkhirEl.value = start.toString();
+            }
+
+            renderDashboard();
+        }
+
+        function loadCachedDataFirst() {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    dbP2TL = parseRawData(parsed);
+                    renderDashboard();
+                } catch (e) {
+                    console.warn("Gagal parse cache LocalStorage", e);
+                }
+            }
+            fetchDataFromServer();
+        }
+
+        function fetchDataFromServer() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+            fetch(`${WEB_APP_URL}?tahun=${selectedYear}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) {
+                        alert("Error Backend: " + data.error);
+                        return;
+                    }
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
+                    dbP2TL = parseRawData(data);
+                    renderDashboard();
+                })
+                .catch(err => {
+                    console.error("Fetch Error:", err);
+                })
+                .finally(() => {
+                    if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+                });
+        }
+
+        function parseNum(val) {
+            if (val === null || val === undefined) return 0;
+            if (typeof val === 'number') return isNaN(val) ? 0 : val;
+            let cleaned = String(val).replace(/[^0-9.-]/g, '');
+            let parsed = parseFloat(cleaned);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
+        function parseRawData(rawArray) {
+            return rawArray.map(item => {
+                let d = null;
+                let bVal = parseNum(item.BULAN || item.Bulan || 0);
+                let hVal = parseNum(item.HARI || item.Hari || item.TANGGAL_HARI || 0);
+
+                if (item.TANGGAL) {
+                    d = new Date(item.TANGGAL);
+                    if (!isNaN(d.getTime())) {
+                        bVal = d.getMonth() + 1;
+                        hVal = d.getDate();
+                    } else {
+                        let parts = String(item.TANGGAL).split(/[-/]/);
+                        if (parts.length === 3) {
+                            if (parts[0].length === 4) {
+                                bVal = parseInt(parts[1]);
+                                hVal = parseInt(parts[2]);
+                            } else {
+                                hVal = parseInt(parts[0]);
+                                bVal = parseInt(parts[1]);
+                            }
+                        }
+                    }
+                }
+
+                return {
+                    tanggalStr: item.TANGGAL || '',
+                    dateObj: d,
+                    bulan: bVal || 1,
+                    hari: hVal || 1,
+                    unit: String(item.UNIT || item.ULP || '').trim().toUpperCase(),
+                    targetTahunan: parseNum(item["TARGET TAHUNAN"] || item["TARGET TAHUN"] || item["TARGET_TAHUNAN"] || 0),
+                    targetBulanan: parseNum(item["TARGET BULAN"] || item["TARGET BULANAN"] || 0),
+                    targetMinggu: parseNum(item["TARGET MINGGU"] || 0),
+                    targetHarian: parseNum(item["TARGET HARI"] || item["TARGET HARIAN"] || 0),
+                    kwhRealisasi: parseNum(item["REALISASI"] || item["REALISASI KWH"] || 0),
+                    pjuRealisasi: parseNum(item["PJU"] || item["PJU (KWH)"] || item["REALISASI PJU"] || 0),
+                    nonPjuRealisasi: parseNum(item["NON PJU"] || item["NON_PJU"] || item["REALISASI NON PJU"] || 0),
+                    pelangganP: parseNum(item["P"] || item["PELANGGAN P"] || 0),
+                    pelangganK: parseNum(item["K"] || item["PELANGGAN K"] || 0),
+                    realisasiP: parseNum(item["REALISASI P"] || 0),
+                    realisasiK: parseNum(item["REALISASI K"] || 0)
+                };
+            });
+        }
+
+        function getTargetUnit(unitName, bulanNum) {
+            const matchInMonth = dbP2TL.find(r => r.unit === unitName && r.bulan === bulanNum && (r.targetBulanan > 0 || r.targetTahunan > 0));
+            if (matchInMonth) return matchInMonth;
+
+            const matchAnywhere = dbP2TL.find(r => r.unit === unitName && (r.targetBulanan > 0 || r.targetTahunan > 0));
+            if (matchAnywhere) return matchAnywhere;
+
+            return { targetTahunan: 0, targetBulanan: 0, targetMinggu: 0, targetHarian: 0 };
+        }
+
+        function getLmRangesFromUI() {
+            return {
+                m1: { start: parseInt(document.getElementById('lm_m1_start').value) || 1, end: parseInt(document.getElementById('lm_m1_end').value) || 7 },
+                m2: { start: parseInt(document.getElementById('lm_m2_start').value) || 8, end: parseInt(document.getElementById('lm_m2_end').value) || 14 },
+                m3: { start: parseInt(document.getElementById('lm_m3_start').value) || 15, end: parseInt(document.getElementById('lm_m3_end').value) || 21 },
+                m4: { start: parseInt(document.getElementById('lm_m4_start').value) || 22, end: parseInt(document.getElementById('lm_m4_end').value) || 31 }
+            };
+        }
+
+        function resetDefaultLmRange() {
+            document.getElementById('lm_m1_start').value = 1; document.getElementById('lm_m1_end').value = 7;
+            document.getElementById('lm_m2_start').value = 8; document.getElementById('lm_m2_end').value = 14;
+            document.getElementById('lm_m3_start').value = 15; document.getElementById('lm_m3_end').value = 21;
+            document.getElementById('lm_m4_start').value = 22; document.getElementById('lm_m4_end').value = 31;
+            renderDashboard();
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-slate-200 text-slate-700 hover:bg-slate-300";
+            });
+            const activeTab = document.getElementById(`tab-${mode}`);
+            if (activeTab) {
+                activeTab.className = "tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-2 whitespace-nowrap bg-blue-600 text-white shadow-sm";
+            }
+
+            const mainTableContainer = document.getElementById('main-table-container');
+            const lmTables = document.getElementById('lm-tables-container');
+            const PJUdaily = document.getElementById('pju-daily-container');
+            const textReportContainer = document.getElementById('text-report-container');
+            const filterContainer = document.getElementById('tab-month-container');
+            const kpiContainer = document.getElementById('kpi-cards-container');
+            const chartContainer = document.getElementById('chart-section-container');
+
+            const kpiTitle1 = document.getElementById('kpi-box-title-1');
+            const kpiDesc1 = document.getElementById('kpi-box-desc-1');
+            const kpiIcon1 = document.getElementById('kpi-box-icon-1');
+
+            const kpiTitle2 = document.getElementById('kpi-box-title-2');
+            const kpiDesc2 = document.getElementById('kpi-box-desc-2');
+            const kpiIcon2 = document.getElementById('kpi-box-icon-2');
+
+            const kpiTitle3 = document.getElementById('kpi-box-title-3');
+            const kpiDesc3 = document.getElementById('kpi-box-desc-3');
+            const kpiIcon3 = document.getElementById('kpi-gap-icon');
+
+            const kpiTitle4 = document.getElementById('kpi-box-title-4');
+            const kpiDesc4 = document.getElementById('kpi-box-desc-4');
+            const kpiIcon4 = document.getElementById('kpi-box-icon-4');
+
+            // Reset visibility
+            mainTableContainer.classList.add('hidden');
+            lmTables.classList.add('hidden');
+            PJUdaily.classList.add('hidden');
+            textReportContainer.classList.add('hidden');
+            filterContainer.classList.remove('hidden');
+            kpiContainer.classList.remove('hidden');
+            chartContainer.classList.remove('hidden');
+
+            if (mode === 'textreport') {
+                textReportContainer.classList.remove('hidden');
+                filterContainer.classList.add('hidden');
+                kpiContainer.classList.add('hidden');
+                chartContainer.classList.add('hidden');
+                generateTextReport(); // Auto generate on click tab
+                return;
+            }
+
+            if (mode === 'pju') {
+                if (kpiTitle1) kpiTitle1.innerText = "TOTAL KWH REALISASI";
+                if (kpiDesc1) kpiDesc1.innerText = "Akumulasi PJU & Non PJU";
+                if (kpiIcon1) {
+                    kpiIcon1.className = "bg-blue-100 text-blue-600 p-2 rounded-lg text-xs";
+                    kpiIcon1.innerHTML = `<i class="fa-solid fa-chart-pie"></i>`;
+                }
+
+                if (kpiTitle2) kpiTitle2.innerText = "REALISASI PJU";
+                if (kpiDesc2) kpiDesc2.innerText = "Total Energi PJU Teramankan";
+                if (kpiIcon2) {
+                    kpiIcon2.className = "bg-amber-100 text-amber-600 p-2 rounded-lg text-xs";
+                    kpiIcon2.innerHTML = `<i class="fa-solid fa-lightbulb"></i>`;
+                }
+
+                if (kpiTitle3) kpiTitle3.innerText = "REALISASI NON PJU";
+                if (kpiDesc3) kpiDesc3.innerText = "Total Energi Non PJU";
+                if (kpiIcon3) {
+                    kpiIcon3.className = "bg-blue-100 text-blue-600 p-2 rounded-lg text-xs";
+                    kpiIcon3.innerHTML = `<i class="fa-solid fa-plug"></i>`;
+                }
+
+                if (kpiTitle4) kpiTitle4.innerText = "RASIO PJU";
+                if (kpiDesc4) kpiDesc4.innerText = "Persentase PJU dari Total";
+                if (kpiIcon4) {
+                    kpiIcon4.className = "bg-purple-100 text-purple-600 p-2 rounded-lg text-xs";
+                    kpiIcon4.innerHTML = `<i class="fa-solid fa-percent"></i>`;
+                }
+            } else if (mode === 'pk') {
+                if (kpiTitle1) kpiTitle1.innerText = "TOTAL REALISASI KWH (P+K)";
+                if (kpiDesc1) kpiDesc1.innerText = "Akumulasi Realisasi P & K";
+                if (kpiIcon1) {
+                    kpiIcon1.className = "bg-blue-100 text-blue-600 p-2 rounded-lg text-xs";
+                    kpiIcon1.innerHTML = `<i class="fa-solid fa-calculator"></i>`;
+                }
+
+                if (kpiTitle2) kpiTitle2.innerText = "REALISASI P (kWh)";
+                if (kpiDesc2) kpiDesc2.innerText = "Total Energi Pelanggan P";
+                if (kpiIcon2) {
+                    kpiIcon2.className = "bg-teal-100 text-teal-600 p-2 rounded-lg text-xs";
+                    kpiIcon2.innerHTML = `<i class="fa-solid fa-square-check"></i>`;
+                }
+
+                if (kpiTitle3) kpiTitle3.innerText = "REALISASI K (kWh)";
+                if (kpiDesc3) kpiDesc3.innerText = "Total Energi Pelanggan K";
+                if (kpiIcon3) {
+                    kpiIcon3.className = "bg-purple-100 text-purple-600 p-2 rounded-lg text-xs";
+                    kpiIcon3.innerHTML = `<i class="fa-solid fa-bolt"></i>`;
+                }
+
+                if (kpiTitle4) kpiTitle4.innerText = "TOTAL PELANGGAN";
+                if (kpiDesc4) kpiDesc4.innerText = "Akumulasi Pelanggan P & K";
+                if (kpiIcon4) {
+                    kpiIcon4.className = "bg-indigo-100 text-indigo-600 p-2 rounded-lg text-xs";
+                    kpiIcon4.innerHTML = `<i class="fa-solid fa-users"></i>`;
+                }
+            } else {
+                if (kpiTitle1) kpiTitle1.innerText = "Target kWh";
+                if (kpiDesc1) kpiDesc1.innerText = "Target KM";
+                if (kpiIcon1) {
+                    kpiIcon1.className = "bg-blue-100 text-blue-600 p-2 rounded-lg text-xs";
+                    kpiIcon1.innerHTML = `<i class="fa-solid fa-bullseye"></i>`;
+                }
+
+                if (kpiTitle2) kpiTitle2.innerText = "Realisasi kWh";
+                if (kpiDesc2) kpiDesc2.innerText = "Total Energi Teramankan";
+                if (kpiIcon2) {
+                    kpiIcon2.className = "bg-emerald-100 text-emerald-600 p-2 rounded-lg text-xs";
+                    kpiIcon2.innerHTML = `<i class="fa-solid fa-square-check"></i>`;
+                }
+
+                if (kpiTitle3) kpiTitle3.innerText = "Gap / Selisih";
+                if (kpiDesc3) kpiDesc3.innerText = "Realisasi vs Target";
+                if (kpiIcon3) {
+                    kpiIcon3.className = "bg-rose-100 text-rose-600 p-2 rounded-lg text-xs";
+                    kpiIcon3.innerHTML = `<i class="fa-solid fa-arrow-trend-down"></i>`;
+                }
+
+                if (kpiTitle4) kpiTitle4.innerText = "PENCAPAIAN (%)";
+                if (kpiDesc4) kpiDesc4.innerText = "Persentase Perolehan";
+                if (kpiIcon4) {
+                    kpiIcon4.className = "bg-purple-100 text-purple-600 p-2 rounded-lg text-xs";
+                    kpiIcon4.innerHTML = `<i class="fa-solid fa-percent"></i>`;
+                }
+            }
+
+            if (mode === 'range' || mode === 'pju' || mode === 'pk') {
+                containerBulanTunggal.classList.add('hidden');
+                containerFilterHari.classList.add('hidden');
+                containerFilterRange.classList.remove('hidden');
+            } else if (mode === 'harian') {
+                containerBulanTunggal.classList.remove('hidden');
+                containerFilterHari.classList.remove('hidden');
+                containerFilterRange.classList.add('hidden');
+            } else {
+                containerBulanTunggal.classList.remove('hidden');
+                containerFilterHari.classList.add('hidden');
+                containerFilterRange.classList.add('hidden');
+            }
+
+            if (mode === 'lm') {
+                mainTableContainer.classList.add('hidden');
+                PJUdaily.classList.add('hidden');
+                lmTables.classList.remove('hidden');
+            } else if (mode === 'pju') {
+                mainTableContainer.classList.remove('hidden');
+                PJUdaily.classList.remove('hidden');
+                lmTables.classList.add('hidden');
+            } else {
+                mainTableContainer.classList.remove('hidden');
+                lmTables.classList.add('hidden');
+            }
+
+            renderDashboard();
+        }
+
+        function getFilteredDataset() {
+            const b = parseInt(filterBulanEl.value);
+            const u = filterUnitEl.value;
+
+            return dbP2TL.filter(row => {
+                const matchBulan = row.bulan === b;
+                const matchUnit = (u === "ALL") ? true : (row.unit === u);
+                return matchBulan && matchUnit;
+            });
+        }
+
+        function updateGapKPI(totalTarget, totalReal) {
+            const gap = totalReal - totalTarget;
+            const gapEl = document.getElementById('kpi-gap');
+            const gapIconEl = document.getElementById('kpi-gap-icon');
+
+            if (!gapEl || !gapIconEl) return;
+
+            if (currentMode === 'pju') {
+                gapEl.innerText = Math.round(totalTarget).toLocaleString('id-ID') + " kWh";
+                gapEl.className = "text-xl font-extrabold text-blue-600 mt-2";
+                gapIconEl.className = "bg-blue-100 text-blue-600 p-2 rounded-lg text-xs";
+                gapIconEl.innerHTML = `<i class="fa-solid fa-plug"></i>`;
+                return;
+            }
+
+            if (currentMode === 'pk') {
+                gapEl.innerText = Math.round(totalReal).toLocaleString('id-ID') + " kWh";
+                gapEl.className = "text-xl font-extrabold text-purple-600 mt-2";
+                gapIconEl.className = "bg-purple-100 text-purple-600 p-2 rounded-lg text-xs";
+                gapIconEl.innerHTML = `<i class="fa-solid fa-bolt"></i>`;
+                return;
+            }
+
+            if (gap >= 0) {
+                gapEl.innerText = "TERCAPAI";
+                gapEl.className = "text-xl font-extrabold text-emerald-600 mt-2 tracking-wide";
+                gapIconEl.className = "bg-emerald-100 text-emerald-600 p-2 rounded-lg text-xs";
+                gapIconEl.innerHTML = `<i class="fa-solid fa-arrow-trend-up"></i>`;
+            } else {
+                gapEl.innerText = Math.round(gap).toLocaleString('id-ID') + " kWh";
+                gapEl.className = "text-xl font-extrabold text-rose-600 mt-2";
+                gapIconEl.className = "bg-rose-100 text-rose-600 p-2 rounded-lg text-xs";
+                gapIconEl.innerHTML = `<i class="fa-solid fa-arrow-trend-down"></i>`;
+            }
+        }
+
+        function renderDashboard() {
+            if (currentMode === 'textreport') { generateTextReport(); return; } // refresh laporan setelah data dimuat
+            if (currentMode === 'harian') renderHarianView();
+            else if (currentMode === 'matriks') renderMatriksView();
+            else if (currentMode === 'range') renderRangeView();
+            else if (currentMode === 'lm') renderLMView();
+            else if (currentMode === 'pju') {
+                renderPJUView();
+                renderPjuNonPjuTables();
+            }
+            else if (currentMode === 'pk') renderPKView();
+        }
+
+        /* GENERATE TEXT REPORT WA FUNCTION */
+function generateTextReport() {
+    const outEl = document.getElementById('reportOutput');
+
+    // Data belum dimuat (fetch masih berjalan) -> jangan hasilkan laporan bernilai 0
+    if (!dbP2TL || dbP2TL.length === 0) {
+        outEl.value = "Data belum dimuat. Tunggu beberapa detik lalu klik 'Generate Report' lagi.";
+        return;
+    }
+
+    const bulanVal = parseInt(document.getElementById('reportBulan').value);
+    const tanggalVal = parseInt(document.getElementById('reportTanggal').value);
+    const tahunVal = parseInt(selectedYear);
+    const bulanNama = monthNames[bulanVal - 1];
+    const hariDalamBulan = (m) => new Date(tahunVal, m, 0).getDate();
+    const maxHariAktif = hariDalamBulan(bulanVal);
+
+    // Target harian satu unit pada bulan m (urutan fallback):
+    // 1) targetHarian  2) targetBulanan / jumlah hari  3) targetTahunan / 12 / jumlah hari
+    const targetHarianUnit = (u, m) => {
+        const t = getTargetUnit(u, m);
+        const hari = hariDalamBulan(m);
+        if (t.targetHarian > 0) return t.targetHarian;
+        if (t.targetBulanan > 0) return t.targetBulanan / hari;
+        if (t.targetTahunan > 0) return t.targetTahunan / 12 / hari;
+        return 0;
+    };
+
+    // Target bulanan satu unit (fallback: targetHarian x hari, lalu targetTahunan / 12)
+    const targetBulananUnit = (u, m) => {
+        const t = getTargetUnit(u, m);
+        if (t.targetBulanan > 0) return t.targetBulanan;
+        if (t.targetHarian > 0) return t.targetHarian * hariDalamBulan(m);
+        if (t.targetTahunan > 0) return t.targetTahunan / 12;
+        return 0;
+    };
+
+    const sumReal = (rows) => rows.reduce((s, r) => s + r.kwhRealisasi, 0);
+
+    // 1. Kumulatif dari 1 Januari s.d tanggal & bulan terpilih
+    // Realisasi: semua baris dengan bulan sebelumnya + bulan terpilih s.d tanggal terpilih
+    const realKumTotal = sumReal(dbP2TL.filter(r =>
+        r.bulan < bulanVal || (r.bulan === bulanVal && r.hari <= tanggalVal)
+    ));
+
+    // Target: jumlah target bulanan penuh dari Januari s.d bulan terpilih
+    // (sama dengan perhitungan menu Range Bulan)
+    let targetKumTotal = 0;
+    for (let m = 1; m <= bulanVal; m++) {
+        unitsList.forEach(u => {
+            targetKumTotal += targetBulananUnit(u, m);
+        });
+    }
+    const persenKum = targetKumTotal > 0 ? (realKumTotal / targetKumTotal) * 100 : 0;
+
+    // 2. Realisasi bulan berjalan s.d tanggal terpilih
+    let targetBulanVal = 0;
+    unitsList.forEach(u => { targetBulanVal += targetBulananUnit(u, bulanVal); });
+
+    const realBulanBerjalan = sumReal(dbP2TL.filter(r => r.bulan === bulanVal && r.hari <= tanggalVal));
+    const persenBulanBerjalan = targetBulanVal > 0 ? (realBulanBerjalan / targetBulanVal) * 100 : 0;
+
+    // 3. Realisasi harian (tanggal terpilih)
+    let targetHarianTotal = 0;
+    unitsList.forEach(u => { targetHarianTotal += targetHarianUnit(u, bulanVal); });
+
+    const realHarianIni = sumReal(dbP2TL.filter(r => r.bulan === bulanVal && r.hari === tanggalVal));
+    const persenHarian = targetHarianTotal > 0 ? (realHarianIni / targetHarianTotal) * 100 : 0;
+
+    // 4 & 5. Jumlah hari target > 100 rb kWh dan realisasi > 100 rb kWh (bulan terpilih s.d tanggal terpilih)
+    let countTargetGt100k = 0;
+    let countRealGt100k = 0;
+    for (let d = 1; d <= Math.min(tanggalVal, maxHariAktif); d++) {
+        if (targetHarianTotal > 100000) countTargetGt100k++;
+        const dReal = sumReal(dbP2TL.filter(r => r.bulan === bulanVal && r.hari === d));
+        if (dReal > 100000) countRealGt100k++;
+    }
+
+    // Tanggal laporan = tanggal terpilih + 1 hari (aman untuk akhir bulan/tahun)
+    const tglLapor = new Date(tahunVal, bulanVal - 1, tanggalVal + 1);
+    const tglLaporHari = tglLapor.getDate();
+    const tglLaporBulan = monthNames[tglLapor.getMonth()];
+    const tglLaporTahun = tglLapor.getFullYear();
+
+    const fmt = (num, decimals = 0) => Number(num).toLocaleString('id-ID', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    });
+
+    const reportText = `Assalamu'alaykum warohmatullahi wabarokatuh
+
+Yth :
+EVP ODS
+EVP ODM
+EVP ODJ
+
+Pada hari ini tanggal ${tglLaporHari} ${tglLaporBulan} ${tglLaporTahun}
+Izin kami sampaikan laporan realisasi P2TL UP3 Parepare ${tanggalVal} ${bulanNama} ${selectedYear} :
+
+1. Realisasi kumulatif sd ${tanggalVal} ${bulanNama} ${selectedYear} sebesar ${fmt(realKumTotal)} kWh dari target ${fmt(targetKumTotal)} kWh atau sebesar ${fmt(persenKum, 2)} %
+2. Realisasi bulan ${bulanNama} sd saat ini ${fmt(realBulanBerjalan)} kWh dari target ${fmt(targetBulanVal)} kWh Realisasi ${fmt(persenBulanBerjalan, 2)} %
+3. Realisasi P2TL harian ${fmt(realHarianIni)} kWh dengan target harian ${fmt(targetHarianTotal)} kWh dari pencapaian harian ${fmt(persenHarian, 2)} %
+4. Target > 100 rb kWh = ${countTargetGt100k} hari
+5. Realisasi > 100 rb kWh = ${countRealGt100k} hari
+
+Demikian Laporan realisasi P2TL UP3 Parepare bapak, terima kasih`;
+
+    outEl.value = reportText;
+}
+
+        function copyTextReport() {
+            const textarea = document.getElementById('reportOutput');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                alert("Text report berhasil disalin ke clipboard!");
+            }).catch(err => {
+                alert("Gagal menyalin text.");
+            });
+        }
+
+        function sendWhatsAppReport() {
+            const textarea = document.getElementById('reportOutput');
+            const textEncoded = encodeURIComponent(textarea.value);
+            const waUrl = `https://api.whatsapp.com/send?text=${textEncoded}`;
+            window.open(waUrl, '_blank');
+        }
+
+        /* 1. FILTER HARIAN VIEW */
+        function renderHarianView() {
+            const filtered = getFilteredDataset();
+            const selectedUnit = filterUnitEl.value;
+            const b = parseInt(filterBulanEl.value);
+            const selectedHari = filterHariEl.value;
+            const unitsToRender = selectedUnit === "ALL" ? unitsList : [selectedUnit];
+
+            let isSpecificDay = selectedHari !== "ALL";
+            let targetColLabel = isSpecificDay ? `TARGET HARIAN (TGL ${selectedHari})` : "TARGET BULAN";
+            let realColLabel = isSpecificDay ? `REALISASI (TGL ${selectedHari})` : "REALISASI BULAN INI";
+
+            let rowData = unitsToRender.map(u => {
+                const rows = filtered.filter(r => r.unit === u);
+                const targetObj = getTargetUnit(u, b);
+                
+                let targetHarian = targetObj.targetHarian;
+                let targetBulanan = targetObj.targetBulanan;
+                let targetUsed = isSpecificDay ? targetHarian : targetBulanan;
+                
+                let totalRealisasi = 0;
+                if (isSpecificDay) {
+                    const hNum = parseInt(selectedHari);
+                    const matchDay = rows.find(r => r.hari === hNum);
+                    totalRealisasi = matchDay ? matchDay.kwhRealisasi : 0;
+                } else {
+                    totalRealisasi = rows.reduce((acc, r) => acc + r.kwhRealisasi, 0);
+                }
+
+                const gap = totalRealisasi - targetUsed;
+                const ach = targetUsed > 0 ? (totalRealisasi / targetUsed) * 100 : 0;
+
+                return { unit: u, targetHarian, targetBulanan, targetUsed, totalRealisasi, gap, ach };
+            });
+
+            const totalTarget = rowData.reduce((s, r) => s + r.targetUsed, 0);
+            const totalReal = rowData.reduce((s, r) => s + r.totalRealisasi, 0);
+            const totalTargetHarian = rowData.reduce((s, r) => s + r.targetHarian, 0); 
+            const totalAch = totalTarget > 0 ? (totalReal / totalTarget) * 100 : 0;
+
+            document.getElementById('kpi-target').innerText = Math.round(totalTarget).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(totalReal).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(totalTarget, totalReal);
+            document.getElementById('kpi-percentage').innerText = totalAch.toFixed(2) + "%";
+
+            const thead = document.getElementById('table-head');
+            thead.innerHTML = `
+                <tr>
+                    <th class="px-4 py-3">UNIT / ULP</th>
+                    <th class="px-4 py-3 text-right">TARGET HARI</th>
+                    <th class="px-4 py-3 text-right">${targetColLabel}</th>
+                    <th class="px-4 py-3 text-right">${realColLabel}</th>
+                    <th class="px-4 py-3 text-right">GAP (KWH)</th>
+                    <th class="px-4 py-3 text-right">CAPAIAN (%)</th>
+                </tr>
+            `;
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = rowData.map(r => `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-200">
+                    <td class="px-4 py-3 font-bold text-slate-800">${r.unit}</td>
+                    <td class="px-4 py-3 text-right font-mono">${Math.round(r.targetHarian).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-semibold">${Math.round(r.targetUsed).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold text-emerald-600">${Math.round(r.totalRealisasi).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold ${r.gap >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${Math.round(r.gap).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-extrabold ${r.ach >= 100 ? 'text-emerald-600' : 'text-amber-600'}">${r.ach.toFixed(2)}%</td>
+                </tr>
+            `).join('');
+
+            const totalGap = totalReal - totalTarget;
+            tbody.innerHTML += `
+                <tr class="bg-slate-800 text-white font-extrabold">
+                    <td class="px-4 py-3 uppercase">TOTAL</td>
+                    <td class="px-4 py-3 text-right font-mono text-amber-300">${Math.round(totalTargetHarian).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-yellow-300">${Math.round(totalTarget).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-emerald-300">${Math.round(totalReal).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono ${totalGap >= 0 ? 'text-emerald-300' : 'text-rose-300'}">${Math.round(totalGap).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-purple-300">${totalAch.toFixed(2)}%</td>
+                </tr>
+            `;
+
+            const labels = rowData.map(r => r.unit);
+            updateChart(labels, [
+                { label: isSpecificDay ? `Target Hari ${selectedHari}` : 'Target Bulan', data: rowData.map(r => r.targetUsed), backgroundColor: '#cbd5e1' },
+                { label: 'Realisasi kWh', data: rowData.map(r => r.totalRealisasi), backgroundColor: '#10b981' }
+            ]);
+        }
+
+        /* 2. MATRIKS BULANAN VIEW */
+        function renderMatriksView() {
+            const filtered = getFilteredDataset();
+            const selectedUnit = filterUnitEl.value;
+            const b = parseInt(filterBulanEl.value);
+            const unitsToRender = selectedUnit === "ALL" ? unitsList : [selectedUnit];
+
+            let dayCols = '';
+            for (let d = 1; d <= 31; d++) {
+                dayCols += `<th class="px-2 py-2 text-center border-r border-slate-200 text-[10px] w-10">${d}</th>`;
+            }
+
+            const thead = document.getElementById('table-head');
+            thead.innerHTML = `
+                <tr class="align-middle">
+                    <th class="px-3 py-3 border-r border-slate-200 bg-slate-200 font-extrabold w-28 whitespace-normal">UNIT / ULP</th>
+                    <th class="px-2 py-3 text-right border-r border-slate-200 bg-blue-50 whitespace-normal w-24">TARGET TAHUN</th>
+                    <th class="px-2 py-3 text-right border-r border-slate-200 bg-blue-50 whitespace-normal w-24">TARGET BULAN</th>
+                    <th class="px-2 py-3 text-right border-r border-slate-200 bg-blue-50 whitespace-normal w-24">TARGET MINGGU</th>
+                    <th class="px-2 py-3 text-right border-r border-slate-200 bg-blue-50 whitespace-normal w-24">TARGET HARI</th>
+                    ${dayCols}
+                    <th class="px-2 py-3 text-right bg-emerald-100 border-r border-slate-200 text-emerald-950 font-extrabold whitespace-normal w-28">REALISASI BULAN INI (d.d)</th>
+                    <th class="px-2 py-3 text-right bg-emerald-100 border-r border-slate-200 text-emerald-950 font-extrabold whitespace-normal w-24">% ACH BULAN INI</th>
+                    <th class="px-2 py-3 text-right bg-indigo-100 border-r border-slate-200 text-indigo-950 font-extrabold whitespace-normal w-28">REALISASI KUMULATIF (s.d)</th>
+                    <th class="px-2 py-3 text-right bg-indigo-100 text-indigo-950 font-extrabold whitespace-normal w-24">% ACH KUMULATIF</th>
+                </tr>
+            `;
+
+            let grandTotalMonth = 0;
+            let grandTotalKumulatif = 0;
+            let grandTargetThn = 0;
+            let grandTargetBln = 0;
+            let grandTargetMgg = 0;
+            let grandTargetHri = 0;
+            let dailyTotals = Array(32).fill(0);
+
+            const tbody = document.getElementById('table-body');
+            let rowsHtml = unitsToRender.map(u => {
+                const rows = filtered.filter(r => r.unit === u);
+                const targetObj = getTargetUnit(u, b);
+
+                let targetThn = targetObj.targetTahunan;
+                if (targetThn === 0 && targetObj.targetBulanan > 0) {
+                    targetThn = targetObj.targetBulanan * b;
+                }
+
+                const targetBln = targetObj.targetBulanan;
+                const targetMgg = targetObj.targetMinggu;
+                const targetHri = targetObj.targetHarian;
+
+                grandTargetThn += targetThn;
+                grandTargetBln += targetBln;
+                grandTargetMgg += targetMgg;
+                grandTargetHri += targetHri;
+
+                let rowSum = 0;
+                let dayCells = '';
+
+                for (let d = 1; d <= 31; d++) {
+                    const match = rows.find(r => r.hari === d);
+                    const val = match ? match.kwhRealisasi : 0;
+                    rowSum += val;
+                    dailyTotals[d] += val;
+
+                    const bg = val > 0 ? 'bg-emerald-50 text-emerald-900 font-semibold' : 'text-slate-300';
+                    dayCells += `<td class="px-1.5 py-2 text-center border-r border-slate-100 font-mono text-[11px] ${bg}">${val > 0 ? Math.round(val).toLocaleString('id-ID') : '-'}</td>`;
+                }
+
+                const rowsKumulatif = dbP2TL.filter(r => r.unit === u && r.bulan <= b);
+                const realisasiKumulatif = rowsKumulatif.reduce((acc, r) => acc + r.kwhRealisasi, 0);
+
+                grandTotalMonth += rowSum;
+                grandTotalKumulatif += realisasiKumulatif;
+
+                const achBulanIni = targetBln > 0 ? (rowSum / targetBln) * 100 : 0;
+                const targetKumulatif = targetBln * b;
+                const achKumulatif = targetKumulatif > 0 ? (realisasiKumulatif / targetKumulatif) * 100 : (targetThn > 0 ? (realisasiKumulatif / targetThn) * 100 : 0);
+
+                return `
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+                        <td class="px-3 py-2.5 font-bold text-slate-800 border-r border-slate-200 bg-slate-50 whitespace-normal">${u}</td>
+                        <td class="px-2 py-2.5 text-right font-mono border-r border-slate-200 text-slate-600">${Math.round(targetThn).toLocaleString('id-ID')}</td>
+                        <td class="px-2 py-2.5 text-right font-mono border-r border-slate-200 font-semibold text-slate-700">${Math.round(targetBln).toLocaleString('id-ID')}</td>
+                        <td class="px-2 py-2.5 text-right font-mono border-r border-slate-200 text-slate-600">${Math.round(targetMgg).toLocaleString('id-ID')}</td>
+                        <td class="px-2 py-2.5 text-right font-mono border-r border-slate-200 text-slate-600">${Math.round(targetHri).toLocaleString('id-ID')}</td>
+                        ${dayCells}
+                        <td class="px-2 py-2.5 text-right font-mono font-extrabold text-emerald-700 bg-emerald-50 border-r border-slate-200">${Math.round(rowSum).toLocaleString('id-ID')}</td>
+                        <td class="px-2 py-2.5 text-right font-mono font-extrabold ${achBulanIni >= 100 ? 'text-emerald-600' : 'text-amber-600'} bg-emerald-50/50 border-r border-slate-200">${achBulanIni.toFixed(2)}%</td>
+                        <td class="px-2 py-2.5 text-right font-mono font-extrabold text-indigo-700 bg-indigo-50 border-r border-slate-200">${Math.round(realisasiKumulatif).toLocaleString('id-ID')}</td>
+                        <td class="px-2 py-2.5 text-right font-mono font-extrabold ${achKumulatif >= 100 ? 'text-indigo-600' : 'text-purple-600'} bg-indigo-50/50">${achKumulatif.toFixed(2)}%</td>
+                    </tr>
+                `;
+            }).join('');
+
+            let totalDayCells = '';
+            for (let d = 1; d <= 31; d++) {
+                totalDayCells += `<td class="px-1.5 py-2.5 text-center font-mono text-[11px] font-bold border-r border-slate-700 text-amber-300 bg-slate-900">${dailyTotals[d] > 0 ? Math.round(dailyTotals[d]).toLocaleString('id-ID') : '-'}</td>`;
+            }
+
+            const totalAchBulan = grandTargetBln > 0 ? (grandTotalMonth / grandTargetBln) * 100 : 0;
+            const targetKumulatifTotal = grandTargetBln * 12;
+            const totalAchKumulatif = targetKumulatifTotal > 0 ? (grandTotalKumulatif / targetKumulatifTotal) * 100 : 0;
+
+            rowsHtml += `
+                <tr class="bg-slate-800 text-white font-extrabold">
+                    <td class="px-3 py-3 uppercase border-r border-slate-700 whitespace-normal">TOTAL</td>
+                    <td class="px-2 py-3 text-right font-mono border-r border-slate-700 text-slate-200">${Math.round(grandTargetThn).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono border-r border-slate-700 text-yellow-300">${Math.round(grandTargetBln).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono border-r border-slate-700 text-slate-200">${Math.round(grandTargetMgg).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono border-r border-slate-700 text-slate-200">${Math.round(grandTargetHri).toLocaleString('id-ID')}</td>
+                    ${totalDayCells}
+                    <td class="px-2 py-3 text-right font-mono text-emerald-300 bg-slate-900 border-r border-slate-700 font-black">${Math.round(grandTotalMonth).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-yellow-300 bg-slate-900 border-r border-slate-700 font-black">${totalAchBulan.toFixed(2)}%</td>
+                    <td class="px-2 py-3 text-right font-mono text-indigo-300 bg-slate-900 border-r border-slate-700 font-black">${Math.round(grandTotalKumulatif).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-purple-300 bg-slate-900 font-black">${totalAchKumulatif.toFixed(2)}%</td>
+                </tr>
+            `;
+
+            tbody.innerHTML = rowsHtml;
+
+            document.getElementById('kpi-target').innerText = Math.round(grandTargetBln).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(grandTotalMonth).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(grandTargetBln, grandTotalMonth);
+            document.getElementById('kpi-percentage').innerText = totalAchBulan.toFixed(2) + "%";
+
+            let daysLabels = [];
+            let daysData = [];
+            for (let d = 1; d <= 31; d++) {
+                daysLabels.push(`Tgl ${d}`);
+                daysData.push(dailyTotals[d]);
+            }
+            updateChart(daysLabels, [{ label: 'Realisasi Harian (kWh)', data: daysData, backgroundColor: '#3b82f6' }]);
+        }
+
+        /* 3. RANGE BULAN VIEW */
+        function renderRangeView() {
+            const selectedUnit = filterUnitEl.value;
+            const startMonth = parseInt(filterBulanAwalEl.value);
+            const endMonth = parseInt(filterBulanAkhirEl.value);
+
+            let rangeLabels = [];
+            let monthlyData = [];
+
+            for (let m = startMonth; m <= endMonth; m++) {
+                const mName = monthNames[m - 1];
+                rangeLabels.push(mName);
+
+                const rows = dbP2TL.filter(r => r.bulan === m && (selectedUnit === "ALL" ? true : r.unit === selectedUnit));
+
+                let target = 0;
+                if (selectedUnit === "ALL") {
+                    unitsList.forEach(u => {
+                        target += getTargetUnit(u, m).targetBulanan;
+                    });
+                } else {
+                    target = getTargetUnit(selectedUnit, m).targetBulanan;
+                }
+
+                const realisasi = rows.reduce((s, r) => s + r.kwhRealisasi, 0);
+                const gap = realisasi - target;
+                const ach = target > 0 ? (realisasi / target) * 100 : 0;
+
+                monthlyData.push({ monthName: mName, target, realisasi, gap, ach });
+            }
+
+            const totTarget = monthlyData.reduce((s, m) => s + m.target, 0);
+            const totReal = monthlyData.reduce((s, m) => s + m.realisasi, 0);
+            const totAch = totTarget > 0 ? (totReal / totTarget) * 100 : 0;
+
+            document.getElementById('kpi-target').innerText = Math.round(totTarget).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(totReal).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(totTarget, totReal);
+            document.getElementById('kpi-percentage').innerText = totAch.toFixed(2) + "%";
+
+            const thead = document.getElementById('table-head');
+            thead.innerHTML = `
+                <tr>
+                    <th class="px-4 py-3">BULAN</th>
+                    <th class="px-4 py-3 text-right">TARGET BULAN</th>
+                    <th class="px-4 py-3 text-right">REALISASI KWH</th>
+                    <th class="px-4 py-3 text-right">GAP (KWH)</th>
+                    <th class="px-4 py-3 text-right">CAPAIAN (%)</th>
+                </tr>
+            `;
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = monthlyData.map(m => `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-200">
+                    <td class="px-4 py-3 font-bold text-slate-800">${m.monthName}</td>
+                    <td class="px-4 py-3 text-right font-mono">${Math.round(m.target).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold text-emerald-600">${Math.round(m.realisasi).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold ${m.gap >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${Math.round(m.gap).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-extrabold ${m.ach >= 100 ? 'text-emerald-600' : 'text-amber-600'}">${m.ach.toFixed(2)}%</td>
+                </tr>
+            `).join('');
+
+            const totGap = totReal - totTarget;
+            tbody.innerHTML += `
+                <tr class="bg-slate-800 text-white font-extrabold">
+                    <td class="px-4 py-3 uppercase">TOTAL RENTANG (${monthNames[startMonth - 1]} - ${monthNames[endMonth - 1]})</td>
+                    <td class="px-4 py-3 text-right font-mono">${Math.round(totTarget).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-emerald-300">${Math.round(totReal).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono ${totGap >= 0 ? 'text-emerald-300' : 'text-rose-300'}">${Math.round(totGap).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-yellow-300">${totAch.toFixed(2)}%</td>
+                </tr>
+            `;
+
+            updateChart(rangeLabels, [
+                { label: 'Target Bulan', data: monthlyData.map(m => m.target), backgroundColor: '#94a3b8' },
+                { label: 'Realisasi', data: monthlyData.map(m => m.realisasi), backgroundColor: '#10b981' }
+            ]);
+        }
+
+        /* 4. REALISASI LM MINGGUAN VIEW */
+        function renderLMView() {
+            const selectedUnit = filterUnitEl.value;
+            const unitsToRender = selectedUnit === "ALL" ? unitsList : [selectedUnit];
+            const currentMonth = parseInt(filterBulanEl.value);
+            const ranges = getLmRangesFromUI();
+
+            document.getElementById('th-lm-m1').innerText = `M1 (${ranges.m1.start}-${ranges.m1.end})`;
+            document.getElementById('th-lm-m2').innerText = `M2 (${ranges.m2.start}-${ranges.m2.end})`;
+            document.getElementById('th-lm-m3').innerText = `M3 (${ranges.m3.start}-${ranges.m3.end})`;
+            document.getElementById('th-lm-m4').innerText = `M4 (${ranges.m4.start}-${ranges.m4.end})`;
+
+            renderLmMatrixTable(unitsToRender, currentMonth, ranges);
+            renderFourWeeklyTables(unitsToRender, currentMonth, ranges);
+
+            const monthRows = dbP2TL.filter(r => r.bulan === currentMonth && (selectedUnit === "ALL" ? true : r.unit === selectedUnit));
+            const totalReal = monthRows.reduce((s, r) => s + r.kwhRealisasi, 0);
+
+            let totalTargetBln = 0;
+            if (selectedUnit === "ALL") {
+                unitsList.forEach(u => {
+                    totalTargetBln += getTargetUnit(u, currentMonth).targetBulanan;
+                });
+            } else {
+                totalTargetBln = getTargetUnit(selectedUnit, currentMonth).targetBulanan;
+            }
+
+            const ach = totalTargetBln > 0 ? (totalReal / totalTargetBln) * 100 : 0;
+
+            document.getElementById('kpi-target').innerText = Math.round(totalTargetBln).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(totalReal).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(totalTargetBln, totalReal);
+            document.getElementById('kpi-percentage').innerText = ach.toFixed(2) + "%";
+
+            let weekData = ['m1', 'm2', 'm3', 'm4'].map(w => {
+                const s = ranges[w].start;
+                const e = ranges[w].end;
+                return monthRows.filter(r => r.hari >= s && r.hari <= e).reduce((acc, r) => acc + r.kwhRealisasi, 0);
+            });
+
+            updateChart(['Minggu 1', 'Minggu 2', 'Minggu 3', 'Minggu 4'], [
+                { label: 'Realisasi Per Minggu (kWh)', data: weekData, backgroundColor: '#0d9488' }
+            ]);
+        }
+
+        function renderLmMatrixTable(unitsToRender, month, ranges) {
+            const matrixBody = document.getElementById('matrixLmTableBody');
+            matrixBody.innerHTML = '';
+
+            let totals = {
+                targetBulan: 0,
+                targetMinggu: 0,
+                totalReal: 0,
+                weeks: {
+                    m1: { real: 0, gap: 0, gapCarry: 0 },
+                    m2: { real: 0, gap: 0, gapCarry: 0 },
+                    m3: { real: 0, gap: 0, gapCarry: 0 },
+                    m4: { real: 0, gap: 0, gapCarry: 0 }
+                }
+            };
+
+            const weekKeys = ['m1', 'm2', 'm3', 'm4'];
+
+            unitsToRender.forEach(u => {
+                const targetObj = getTargetUnit(u, month);
+                const targetB = targetObj.targetBulanan;
+                const targetM = targetObj.targetMinggu;
+
+                totals.targetBulan += targetB;
+                totals.targetMinggu += targetM;
+
+                const monthRows = dbP2TL.filter(r => r.bulan === month && r.unit === u);
+                let unitTotalReal = 0;
+                let rowWeekMetrics = {};
+                let sumRealPrevious = 0;
+
+                weekKeys.forEach((wKey, idx) => {
+                    const r = ranges[wKey];
+                    const realM = monthRows.filter(item => item.hari >= r.start && item.hari <= r.end).reduce((s, item) => s + item.kwhRealisasi, 0);
+                    unitTotalReal += realM;
+
+                    const persenM = targetM > 0 ? (realM / targetM) * 100 : 0;
+                    
+                    let gapM = targetM - realM;
+                    if (gapM < 0) gapM = 0;
+
+                    let gapCarryM = 0;
+                    let weekMultiplier = idx + 1;
+                    sumRealPrevious += realM;
+
+                    if (idx === 0) {
+                        gapCarryM = gapM;
+                    } else {
+                        let targetSumAccumulated = targetM * weekMultiplier;
+                        gapCarryM = targetSumAccumulated - sumRealPrevious;
+                        if (gapCarryM < 0) gapCarryM = 0;
+                    }
+
+                    rowWeekMetrics[wKey] = { real: realM, persen: persenM, gap: gapM, gapCarry: gapCarryM };
+
+                    totals.weeks[wKey].real += realM;
+                    totals.weeks[wKey].gap += gapM;
+                    totals.weeks[wKey].gapCarry += gapCarryM;
+                });
+
+                totals.totalReal += unitTotalReal;
+                const totalAchUnit = targetB > 0 ? (unitTotalReal / targetB) * 100 : 0;
+
+                let rowHtml = `<tr class="hover:bg-slate-50 transition border-b border-slate-100 font-mono">
+                    <td class="px-2 py-2 font-bold text-slate-800 text-left font-sans">${u}</td>
+                    <td class="px-2 py-2 text-right text-slate-600">${Math.round(targetB).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2 text-right text-slate-700 font-semibold">${Math.round(targetM).toLocaleString('id-ID')}</td>`;
+
+                weekKeys.forEach((wKey, i) => {
+                    const wm = rowWeekMetrics[wKey];
+                    rowHtml += `
+                        <td class="px-1.5 py-2 text-right font-bold text-slate-800">${wm.real > 0 ? Math.round(wm.real).toLocaleString('id-ID') : '-'}</td>
+                        <td class="px-1.5 py-2 text-right ${wm.persen >= 100 ? 'text-emerald-600 font-bold' : 'text-slate-500'}">${wm.persen.toFixed(1)}%</td>
+                        <td class="px-1.5 py-2 text-right ${wm.gap > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}">${Math.round(wm.gap).toLocaleString('id-ID')}</td>`;
+                    
+                    if (i > 0) {
+                        rowHtml += `<td class="px-1.5 py-2 text-right ${wm.gapCarry > 0 ? 'text-amber-600 font-bold' : 'text-slate-400'}">${Math.round(wm.gapCarry).toLocaleString('id-ID')}</td>`;
+                    }
+                });
+
+                rowHtml += `
+                    <td class="px-2 py-2 text-right font-extrabold text-emerald-700 bg-emerald-50">${Math.round(unitTotalReal).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2 text-right font-extrabold ${totalAchUnit >= 100 ? 'text-emerald-600' : 'text-amber-600'} bg-emerald-50/50">${totalAchUnit.toFixed(1)}%</td>
+                </tr>`;
+
+                matrixBody.innerHTML += rowHtml;
+            });
+
+            const overallAch = totals.targetBulan > 0 ? (totals.totalReal / totals.targetBulan) * 100 : 0;
+            let sumTotalRealAccumulated = 0;
+
+            let totalRowHtml = `<tr class="bg-slate-800 text-white font-extrabold font-mono">
+                <td class="px-2 py-2.5 text-left font-sans uppercase">TOTAL</td>
+                <td class="px-2 py-2.5 text-right text-yellow-300">${Math.round(totals.targetBulan).toLocaleString('id-ID')}</td>
+                <td class="px-2 py-2.5 text-right text-slate-200">${Math.round(totals.targetMinggu).toLocaleString('id-ID')}</td>`;
+
+            weekKeys.forEach((wKey, i) => {
+                const tw = totals.weeks[wKey];
+                const tTargetM = totals.targetMinggu;
+                const tPersen = tTargetM > 0 ? (tw.real / tTargetM) * 100 : 0;
+                
+                sumTotalRealAccumulated += tw.real;
+                let tGapM = tTargetM - tw.real;
+                if (tGapM < 0) tGapM = 0;
+
+                let tGapCarryM = 0;
+                let weekMultiplier = i + 1;
+                if (i === 0) {
+                    tGapCarryM = tGapM;
+                } else {
+                    let targetSumAccumulated = tTargetM * weekMultiplier;
+                    tGapCarryM = targetSumAccumulated - sumTotalRealAccumulated;
+                    if (tGapCarryM < 0) tGapCarryM = 0;
+                }
+
+                totalRowHtml += `
+                    <td class="px-1.5 py-2.5 text-right text-emerald-300">${Math.round(tw.real).toLocaleString('id-ID')}</td>
+                    <td class="px-1.5 py-2.5 text-right text-yellow-300">${tPersen.toFixed(1)}%</td>
+                    <td class="px-1.5 py-2.5 text-right text-rose-300">${Math.round(tGapM).toLocaleString('id-ID')}</td>`;
+
+                if (i > 0) {
+                    totalRowHtml += `<td class="px-1.5 py-2.5 text-right text-amber-300">${Math.round(tGapCarryM).toLocaleString('id-ID')}</td>`;
+                }
+            });
+
+            totalRowHtml += `
+                <td class="px-2 py-2.5 text-right text-emerald-300 bg-slate-900">${Math.round(totals.totalReal).toLocaleString('id-ID')}</td>
+                <td class="px-2 py-2.5 text-right text-yellow-300 bg-slate-900">${overallAch.toFixed(1)}%</td>
+            </tr>`;
+
+            matrixBody.innerHTML += totalRowHtml;
+        }
+
+        /* 5. PJU & NON PJU VIEW */
+        function renderPJUView() {
+            const selectedUnit = filterUnitEl.value;
+            const startMonth = parseInt(filterBulanAwalEl.value);
+            const endMonth = parseInt(filterBulanAkhirEl.value);
+            const unitsToRender = selectedUnit === "ALL" ? unitsList : [selectedUnit];
+
+            let rowData = unitsToRender.map(u => {
+                const rows = dbP2TL.filter(r => r.unit === u && r.bulan >= startMonth && r.bulan <= endMonth);
+                const pju = rows.reduce((s, r) => s + r.pjuRealisasi, 0);
+                const nonPju = rows.reduce((s, r) => s + r.nonPjuRealisasi, 0);
+                const total = pju + nonPju;
+                const pjuPercent = total > 0 ? (pju / total) * 100 : 0;
+
+                return { unit: u, pju, nonPju, total, pjuPercent };
+            });
+
+            const totPJU = rowData.reduce((s, r) => s + r.pju, 0);
+            const totNonPJU = rowData.reduce((s, r) => s + r.nonPju, 0);
+            const totAll = totPJU + totNonPJU;
+            const totPjuPct = totAll > 0 ? (totPJU / totAll) * 100 : 0;
+
+            document.getElementById('kpi-target').innerText = Math.round(totAll).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(totPJU).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(totNonPJU, 0); 
+            document.getElementById('kpi-percentage').innerText = totPjuPct.toFixed(2) + "%";
+
+            const thead = document.getElementById('table-head');
+            thead.innerHTML = `
+                <tr>
+                    <th onclick="sortTable(0, 'pju')" class="px-4 py-3">UNIT / ULP</th>
+                    <th onclick="sortTable(1, 'pju')" class="px-4 py-3 text-right">REALISASI PJU (KWH)</th>
+                    <th onclick="sortTable(2, 'pju')" class="px-4 py-3 text-right">REALISASI NON PJU (KWH)</th>
+                    <th onclick="sortTable(3, 'pju')" class="px-4 py-3 text-right">TOTAL REALISASI (KWH)</th>
+                    <th onclick="sortTable(4, 'pju')" class="px-4 py-3 text-right">% PORSI PJU</th>
+                </tr>
+            `;
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = rowData.map(r => `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-200">
+                    <td class="px-4 py-3 font-bold text-slate-800">${r.unit}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold text-amber-600">${Math.round(r.pju).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold text-blue-600">${Math.round(r.nonPju).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-extrabold text-slate-900">${Math.round(r.total).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono font-bold text-purple-600">${r.pjuPercent.toFixed(2)}%</td>
+                </tr>
+            `).join('');
+
+            tbody.innerHTML += `
+                <tr class="bg-slate-800 text-white font-extrabold">
+                    <td class="px-4 py-3 uppercase">TOTAL (${monthNames[startMonth - 1]} - ${monthNames[endMonth - 1]})</td>
+                    <td class="px-4 py-3 text-right font-mono text-amber-300">${Math.round(totPJU).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-blue-300">${Math.round(totNonPJU).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-yellow-300">${Math.round(totAll).toLocaleString('id-ID')}</td>
+                    <td class="px-4 py-3 text-right font-mono text-purple-300">${totPjuPct.toFixed(2)}%</td>
+                </tr>
+            `;
+
+            updateChart(['PJU', 'NON PJU'], [
+                {
+                    data: [totPJU, totNonPJU],
+                    backgroundColor: ['#f59e0b', '#3b82f6']
+                }
+            ], 'pie');
+        }
+
+        /* 6. REALISASI P & K VIEW */
+        function renderPKView() {
+            const selectedUnit = filterUnitEl.value;
+            const startMonth = parseInt(filterBulanAwalEl.value);
+            const endMonth = parseInt(filterBulanAkhirEl.value);
+            const unitsToRender = selectedUnit === "ALL" ? unitsList : [selectedUnit];
+
+            let rowData = unitsToRender.map(u => {
+                const rows = dbP2TL.filter(r => r.unit === u && r.bulan >= startMonth && r.bulan <= endMonth);
+                const pelP = rows.reduce((s, r) => s + r.pelangganP, 0);
+                const pelK = rows.reduce((s, r) => s + r.pelangganK, 0);
+                const realP = rows.reduce((s, r) => s + r.realisasiP, 0);
+                const realK = rows.reduce((s, r) => s + r.realisasiK, 0);
+                const totalPel = pelP + pelK;
+                const totalReal = realP + realK;
+
+                return { unit: u, pelP, pelK, totalPel, realP, realK, totalReal };
+            });
+
+            const totalPelP = rowData.reduce((s, r) => s + r.pelP, 0);
+            const totalPelK = rowData.reduce((s, r) => s + r.pelK, 0);
+            const totalPelAll = totalPelP + totalPelK;
+
+            const totalRealP = rowData.reduce((s, r) => s + r.realP, 0);
+            const totalRealK = rowData.reduce((s, r) => s + r.realK, 0);
+            const totalRealAll = totalRealP + totalRealK;
+
+            document.getElementById('kpi-target').innerText = Math.round(totalRealAll).toLocaleString('id-ID') + " kWh";
+            document.getElementById('kpi-realisasi').innerText = Math.round(totalRealP).toLocaleString('id-ID') + " kWh";
+            updateGapKPI(0, totalRealK);
+            document.getElementById('kpi-percentage').innerText = totalPelAll.toLocaleString('id-ID')+ " plg";
+
+            const thead = document.getElementById('table-head');
+            thead.innerHTML = `
+                <tr>
+                    <th onclick="sortTable(0, 'pk')" class="px-3 py-3 text-left" rowspan="2">UNIT / ULP</th>
+                    <th class="px-3 py-2 text-center bg-indigo-50 border-r" colspan="3">JUMLAH PELANGGAN (P & K)</th>
+                    <th class="px-3 py-2 text-center bg-teal-50 border-r" colspan="3">REALISASI KWH (P & K)</th>
+                </tr>
+                <tr class="text-xs">
+                    <th onclick="sortTable(1, 'pk')" class="px-2 py-1 text-right bg-indigo-50">P</th>
+                    <th onclick="sortTable(2, 'pk')" class="px-2 py-1 text-right bg-indigo-50">K</th>
+                    <th onclick="sortTable(3, 'pk')" class="px-2 py-1 text-right bg-indigo-100/70 border-r font-bold">TOTAL P+K</th>
+                    
+                    <th onclick="sortTable(4, 'pk')" class="px-2 py-1 text-right bg-teal-50">REALISASI P</th>
+                    <th onclick="sortTable(5, 'pk')" class="px-2 py-1 text-right bg-teal-50">REALISASI K</th>
+                    <th onclick="sortTable(6, 'pk')" class="px-2 py-1 text-right bg-teal-100/70 font-black text-teal-900">TOTAL REALISASI</th>
+                </tr>
+            `;
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = rowData.map(r => `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-200 text-xs">
+                    <td class="px-3 py-2.5 font-bold text-slate-800">${r.unit}</td>
+                    <td class="px-2 py-2.5 text-right font-mono">${r.pelP.toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2.5 text-right font-mono">${r.pelK.toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2.5 text-right font-bold text-indigo-900 bg-indigo-50/50 border-r font-mono">${r.totalPel.toLocaleString('id-ID')}</td>
+                    
+                    <td class="px-2 py-2.5 text-right font-semibold text-teal-700 font-mono">${Math.round(r.realP).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2.5 text-right font-semibold text-purple-700 font-mono">${Math.round(r.realK).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-2.5 text-right font-black text-slate-900 bg-teal-50/50 font-mono">${Math.round(r.totalReal).toLocaleString('id-ID')}</td>
+                </tr>
+            `).join('');
+
+            tbody.innerHTML += `
+                <tr class="bg-slate-800 text-white font-extrabold text-xs">
+                    <td class="px-3 py-3 uppercase">TOTAL (${monthNames[startMonth - 1]} - ${monthNames[endMonth - 1]})</td>
+                    <td class="px-2 py-3 text-right font-mono text-indigo-200">${totalPelP.toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-indigo-200">${totalPelK.toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-indigo-300 bg-slate-900 border-r">${totalPelAll.toLocaleString('id-ID')}</td>
+                    
+                    <td class="px-2 py-3 text-right font-mono text-teal-300">${Math.round(totalRealP).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-purple-300">${Math.round(totalRealK).toLocaleString('id-ID')}</td>
+                    <td class="px-2 py-3 text-right font-mono text-yellow-300 bg-slate-900">${Math.round(totalRealAll).toLocaleString('id-ID')}</td>
+                </tr>
+            `;
+
+            const labels = rowData.map(r => r.unit);
+            updateChart(labels, [
+                {
+                    label: 'Realisasi P (kWh)',
+                    data: rowData.map(r => r.realP),
+                    backgroundColor: 'rgba(13, 148, 136, 0.8)',
+                    borderColor: '#0f766e',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Realisasi K (kWh)',
+                    data: rowData.map(r => r.realK),
+                    backgroundColor: 'rgba(147, 51, 234, 0.8)',
+                    borderColor: '#7e22ce',
+                    borderWidth: 1
+                }
+            ], 'bar');
+        }
+
+        /* HELPER REALISASI HARIAN MINGGUAN (M1 - M4) */
+        function renderFourWeeklyTables(unitsToRender, month, ranges) {
+            const weeks = ['m1', 'm2', 'm3', 'm4'];
+            const monthName = monthNames[month - 1].toUpperCase();
+
+            weeks.forEach(w => {
+                const s = ranges[w].start;
+                const e = ranges[w].end;
+                
+                document.getElementById(`${w}-table-title`).innerText = `TABEL REALISASI MINGGU ${w.toUpperCase()} (TANGGAL ${s} S/D ${e})`;
+                document.getElementById(`${w}-month-label`).innerText = `BULAN: ${monthName} ${selectedYear}`;
+
+                let daysHeader = '';
+                for (let d = s; d <= e; d++) {
+                    daysHeader += `<th class="px-2 py-2 text-center border-r border-slate-200 text-xs">${d}</th>`;
+                }
+
+                document.getElementById(`${w}-head`).innerHTML = `
+                    <tr class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th class="px-4 py-2.5 text-left border-r border-slate-200">UNIT / ULP</th>
+                        <th class="px-3 py-2.5 text-right border-r border-slate-200 bg-blue-50 text-blue-950">TARGET MINGGU</th>
+                        ${daysHeader}
+                        <th class="px-3 py-2.5 text-right border-r border-slate-200 bg-teal-100 text-teal-950 font-extrabold">TOTAL REALISASI</th>
+                        <th class="px-3 py-2.5 text-right border-r border-slate-200 bg-rose-50 text-rose-950 font-extrabold">GAP</th>
+                        <th class="px-3 py-2.5 text-right bg-purple-50 text-purple-950 font-extrabold">% CAPAIAN</th>
+                    </tr>
+                `;
+
+                let totalDailyWeek = {};
+                for (let d = s; d <= e; d++) totalDailyWeek[d] = 0;
+                let grandTotalWeek = 0;
+                let grandTargetWeek = 0;
+
+                let rowsHtml = unitsToRender.map(u => {
+                    const rows = dbP2TL.filter(r => r.bulan === month && r.unit === u);
+                    const targetObj = getTargetUnit(u, month);
+                    const targetM = targetObj.targetMinggu;
+                    grandTargetWeek += targetM;
+
+                    let dailyCells = '';
+                    let unitWeekTotal = 0;
+
+                    for (let d = s; d <= e; d++) {
+                        const match = rows.find(r => r.hari === d);
+                        const val = match ? match.kwhRealisasi : 0;
+                        unitWeekTotal += val;
+                        totalDailyWeek[d] += val;
+
+                        const cellBg = val > 0 ? 'bg-emerald-50 font-bold text-emerald-900' : 'text-slate-400';
+                        dailyCells += `<td class="px-2 py-2 text-center border-r border-slate-100 ${cellBg}">${val > 0 ? Math.round(val).toLocaleString('id-ID') : '-'}</td>`;
+                    }
+                    grandTotalWeek += unitWeekTotal;
+
+                    let gapM = targetM - unitWeekTotal;
+                    if (gapM < 0) gapM = 0;
+                    const achM = targetM > 0 ? (unitWeekTotal / targetM) * 100 : 0;
+
+                    return `
+                        <tr class="hover:bg-slate-50 transition border-b border-slate-100 text-xs font-mono">
+                            <td class="px-4 py-2 font-bold text-slate-800 border-r border-slate-200 font-sans">${u}</td>
+                            <td class="px-3 py-2 text-right border-r border-slate-200 bg-blue-50/50 text-slate-700">${Math.round(targetM).toLocaleString('id-ID')}</td>
+                            ${dailyCells}
+                            <td class="px-3 py-2 text-right border-r border-slate-200 font-extrabold text-teal-800 bg-teal-50/70">${Math.round(unitWeekTotal).toLocaleString('id-ID')}</td>
+                            <td class="px-3 py-2 text-right border-r border-slate-200 font-bold ${gapM > 0 ? 'text-rose-600 bg-rose-50/30' : 'text-slate-400'}">${Math.round(gapM).toLocaleString('id-ID')}</td>
+                            <td class="px-3 py-2 text-right font-extrabold ${achM >= 100 ? 'text-emerald-600 bg-emerald-50/30' : 'text-amber-600'}">${achM.toFixed(1)}%</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                let totalDailyCells = '';
+                for (let d = s; d <= e; d++) {
+                    totalDailyCells += `<td class="px-2 py-2 text-center border-r border-slate-700 bg-slate-900 text-amber-300 font-bold">${totalDailyWeek[d] > 0 ? Math.round(totalDailyWeek[d]).toLocaleString('id-ID') : '-'}</td>`;
+                }
+
+                let totalGapM = grandTargetWeek - grandTotalWeek;
+                if (totalGapM < 0) totalGapM = 0;
+                let totalAchM = grandTargetWeek > 0 ? (grandTotalWeek / grandTargetWeek) * 100 : 0;
+
+                rowsHtml += `
+                    <tr class="bg-slate-800 text-white font-extrabold text-xs font-mono">
+                        <td class="px-4 py-2.5 uppercase border-r border-slate-700 font-sans">TOTAL</td>
+                        <td class="px-3 py-2.5 text-right border-r border-slate-700 text-yellow-300">${Math.round(grandTargetWeek).toLocaleString('id-ID')}</td>
+                        ${totalDailyCells}
+                        <td class="px-4 py-2.5 text-right border-r border-slate-700 bg-slate-900 text-emerald-300 font-black">${Math.round(grandTotalWeek).toLocaleString('id-ID')}</td>
+                        <td class="px-4 py-2.5 text-right border-r border-slate-700 bg-slate-900 text-rose-300">${Math.round(totalGapM).toLocaleString('id-ID')}</td>
+                        <td class="px-4 py-2.5 text-right bg-slate-900 text-yellow-400 font-black">${totalAchM.toFixed(1)}%</td>
+                    </tr>
+                `;
+
+                document.getElementById(`${w}-body`).innerHTML = rowsHtml;
+            });
+        }
+
+        /* CHART JS RENDERER */
+        function initChart() {
+            const ctx = document.getElementById('p2tlChart').getContext('2d');
+            p2tlChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function updateChart(labels, datasets, type = 'bar') {
+            if (p2tlChartInstance) {
+                p2tlChartInstance.destroy();
+            }
+
+            const ctx = document.getElementById('p2tlChart').getContext('2d');
+            const options = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top' } }
+            };
+
+            if (type !== 'pie' && type !== 'doughnut') {
+                options.scales = { y: { beginAtZero: true } };
+            }
+
+            p2tlChartInstance = new Chart(ctx, {
+                type: type,
+                data: { labels: labels, datasets: datasets },
+                options: options
+            });
+        }
+
+        /* EXPORT EXCEL/CSV */
+        function exportCSV() {
+            let table = document.querySelector("#main-table");
+            if (currentMode === 'lm') {
+                table = document.querySelector("#lm-tables-container table");
+            }
+
+            if (!table) return;
+            let csv = [];
+            const rows = table.querySelectorAll("tr");
+            
+            for (let i = 0; i < rows.length; i++) {
+                let row = [], cols = rows[i].querySelectorAll("td, th");
+                for (let j = 0; j < cols.length; j++) {
+                    let cleanText = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/\s+/g, " ").trim();
+                    cleanText = cleanText.replace(/"/g, '""');
+                    row.push('"' + cleanText + '"');
+                }
+                csv.push(row.join(","));
+            }
+
+            const csvFile = new Blob([csv.join("\n")], { type: "text/csv" });
+            const downloadLink = document.createElement("a");
+            downloadLink.download = `Laporan_P2TL_${currentMode.toUpperCase()}_${selectedYear}.csv`;
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        function sortTable(columnIndex, modeType) {
+            const table = document.getElementById("main-table");
+            const tbody = table.querySelector("tbody");
+            let rows = Array.from(tbody.querySelectorAll("tr"));
+
+            if (rows.length === 0 || rows[0].querySelector("td.text-center")) return;
+
+            let totalRow = null;
+            const lastRow = rows[rows.length - 1];
+            
+            if (lastRow && lastRow.cells[0].innerText.toUpperCase().includes("TOTAL")) {
+                totalRow = rows.pop();
+            }
+
+            if (currentSortColumn === columnIndex) {
+                isAscending = !isAscending;
+            } else {
+                currentSortColumn = columnIndex;
+                isAscending = true;
+            }
+
+            rows.sort((rowA, rowB) => {
+                const cellA = rowA.querySelectorAll("td")[columnIndex].innerText.trim();
+                const cellB = rowB.querySelectorAll("td")[columnIndex].innerText.trim();
+
+                const cleanA = parseFloat(cellA.replace(/\./g, '').replace(',', '.').replace('%', ''));
+                const cleanB = parseFloat(cellB.replace(/\./g, '').replace(',', '.').replace('%', ''));
+
+                if (!isNaN(cleanA) && !isNaN(cleanB)) {
+                    return isAscending ? cleanA - cleanB : cleanB - cleanA;
+                } else {
+                    return isAscending ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+                }
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+
+            if (totalRow) {
+                tbody.appendChild(totalRow);
+            }
+
+            updateSortIcons(modeType, columnIndex);
+        }
+
+        function updateSortIcons(modeType, activeIndex) {
+            const headers = document.querySelectorAll("#main-table th");
+            headers.forEach((th, idx) => {
+                const icon = th.querySelector("i");
+                if (icon) {
+                    if (idx === activeIndex) {
+                        icon.className = isAscending 
+                            ? "fa-solid fa-sort-up text-blue-600 text-[11px] ml-1" 
+                            : "fa-solid fa-sort-down text-blue-600 text-[11px] ml-1";
+                    } else {
+                        icon.className = "fa-solid fa-sort text-slate-400 text-[10px] ml-1";
+                    }
+                }
+            });
+        }
+
+        function generateTableHead(headId) {
+            let html = '<tr class="border-b border-slate-300">';
+            html += '<th class="px-3 py-2.5 font-bold text-slate-800 bg-[#e2e8f0] border-r border-slate-300 sticky left-0 z-20">UNIT / ULP</th>';
+            
+            for (let day = 1; day <= 31; day++) {
+                html += `<th class="px-2 py-2.5 text-center font-bold text-slate-700 border-r border-slate-200 w-10">${day}</th>`;
+            }
+            
+            html += '<th class="px-3 py-2.5 font-bold text-slate-800 text-center bg-[#d1fae5] border-l border-r border-slate-300 sticky right-0 z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">TOTAL REALISASI</th>';
+
+            html += '</tr>';
+            document.getElementById(headId).innerHTML = html;
+        }
+
+        function renderPjuNonPjuTables() {
+            const selectedUnit = filterUnitEl ? filterUnitEl.value : 'ALL';
+            const startMonth = filterBulanAwalEl ? parseInt(filterBulanAwalEl.value) : 1;
+            const endMonth = filterBulanAkhirEl ? parseInt(filterBulanAkhirEl.value) : 12;
+            const unitsToRender = selectedUnit === 'ALL' ? unitsList : [selectedUnit];
+
+            generateTableHead('pju-table-head');
+            generateTableHead('non-pju-table-head');
+
+            let dailyTotalsPju = Array(32).fill(0);
+            let dailyTotalsNonPju = Array(32).fill(0);
+
+            let pjuBodyHtml = '';
+            let grandTotalPju = 0;
+            
+            unitsToRender.forEach(unit => {
+                let rowHtml = `<tr class="hover:bg-slate-50 transition-colors"><td class="px-3 py-2 font-semibold text-slate-800 bg-white border-r border-slate-200 sticky left-0 z-10">${unit}</td>`;
+                
+                let totalUnit = 0;
+                for (let day = 1; day <= 31; day++) {
+                    const matches = dbP2TL.filter(r => r.unit === unit && r.bulan >= startMonth && r.bulan <= endMonth && r.hari === day);
+                    let val = matches.reduce((sum, r) => sum + r.pjuRealisasi, 0);
+                    
+                    totalUnit += val;
+                    dailyTotalsPju[day] += val;
+                    
+                    if (val > 0) {
+                        rowHtml += `<td class="px-1 py-2 text-center border-r border-slate-200 bg-[#f0fdf4] text-emerald-800 font-medium">${Math.round(val).toLocaleString('id-ID')}</td>`;
+                    } else {
+                        rowHtml += `<td class="px-1 py-2 text-center border-r border-slate-200 text-slate-300">-</td>`;
+                    }
+                }
+
+                grandTotalPju += totalUnit;
+                rowHtml += `<td class="px-3 py-2 text-center font-bold text-slate-800 bg-[#ecfdf5] border-l border-r border-slate-200 sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">${totalUnit > 0 ? Math.round(totalUnit).toLocaleString('id-ID') : '0'}</td>`;
+                rowHtml += `</tr>`;
+
+                pjuBodyHtml += rowHtml;
+            });
+            document.getElementById('pju-table-body').innerHTML = pjuBodyHtml;
+
+            let footPju = `<tr class="bg-[#1e232a] text-white font-bold">`;
+            footPju += `<td class="px-3 py-2.5 uppercase sticky left-0 z-10 bg-[#1e232a]">TOTAL (${monthNames[startMonth - 1]} s.d ${monthNames[endMonth - 1]})</td>`;
+
+            for(let d = 1; d <= 31; d++) {
+                let dVal = dailyTotalsPju[d];
+                footPju += `<td class="px-1 py-2.5 text-center text-amber-300 font-mono text-xs">${dVal > 0 ? Math.round(dVal).toLocaleString('id-ID') : '-'}</td>`;
+            }
+            footPju += `<td class="px-3 py-2.5 text-center bg-[#111827] text-yellow-300 font-mono sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.1)]">${Math.round(grandTotalPju).toLocaleString('id-ID')}</td>`;
+            footPju += `</tr>`;
+            document.getElementById('pju-table-foot').innerHTML = footPju;
+
+
+            let nonPjuBodyHtml = '';
+            let grandTotalNonPju = 0;
+            
+            unitsToRender.forEach(unit => {
+                let rowHtml = `<tr class="hover:bg-slate-50 transition-colors"><td class="px-3 py-2 font-semibold text-slate-800 bg-white border-r border-slate-200 sticky left-0 z-10">${unit}</td>`;
+                
+                let totalUnit = 0;
+                for (let day = 1; day <= 31; day++) {
+                    const matches = dbP2TL.filter(r => r.unit === unit && r.bulan >= startMonth && r.bulan <= endMonth && r.hari === day);
+                    let val = matches.reduce((sum, r) => sum + r.nonPjuRealisasi, 0);
+                    
+                    totalUnit += val;
+                    dailyTotalsNonPju[day] += val;
+                    
+                    if (val > 0) {
+                        rowHtml += `<td class="px-1 py-2 text-center border-r border-slate-200 bg-[#f0fdf4] text-emerald-800 font-medium">${Math.round(val).toLocaleString('id-ID')}</td>`;
+                    } else {
+                        rowHtml += `<td class="px-1 py-2 text-center border-r border-slate-200 text-slate-300">-</td>`;
+                    }
+                }
+
+                grandTotalNonPju += totalUnit;
+                rowHtml += `<td class="px-3 py-2 text-center font-bold text-slate-800 bg-[#ecfdf5] border-l border-r border-slate-200 sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">${totalUnit > 0 ? Math.round(totalUnit).toLocaleString('id-ID') : '0'}</td>`;
+                rowHtml += `</tr>`;
+
+                nonPjuBodyHtml += rowHtml;
+            });
+            document.getElementById('non-pju-table-body').innerHTML = nonPjuBodyHtml;
+
+            let footNonPju = `<tr class="bg-[#1e232a] text-white font-bold">`;
+            footNonPju += `<td class="px-3 py-2.5 uppercase sticky left-0 z-10 bg-[#1e232a]">TOTAL (${monthNames[startMonth - 1]} s.d ${monthNames[endMonth - 1]})</td>`;
+
+            for(let d = 1; d <= 31; d++) {
+                let dVal = dailyTotalsNonPju[d];
+                footNonPju += `<td class="px-1 py-2.5 text-center text-amber-300 font-mono text-xs">${dVal > 0 ? Math.round(dVal).toLocaleString('id-ID') : '-'}</td>`;
+            }
+            footNonPju += `<td class="px-3 py-2.5 text-center bg-[#111827] text-yellow-300 font-mono sticky right-0 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.1)]">${Math.round(grandTotalNonPju).toLocaleString('id-ID')}</td>`;
+            footNonPju += `</tr>`;
+            document.getElementById('non-pju-table-foot').innerHTML = footNonPju;
+        }
+
+        function handleFileUpload(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var data = new Uint8Array(e.target.result);
+                var workbook = XLSX.read(data, { type: 'array' });
+                var worksheet = workbook.Sheets[workbook.SheetNames[0]];
+
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (jsonData.length <= 1) {
+                    alert("File Excel kosong atau tidak memiliki data baris.");
+                    return;
+                }
+
+                var rows = jsonData.slice(1);
+
+                var formattedData = rows.map(function(row) {
+                    return {
+                        "NO AGENDA": row[1] !== undefined ? row[1] : "",
+                        "IDPEL": row[2] !== undefined ? row[2] : "",
+                        "NAMA": row[3] !== undefined ? row[3] : "",
+                        "GOLONGAN": row[4] !== undefined ? row[4] : "",
+                        "ALAMAT": row[5] !== undefined ? row[5] : "",
+                        "TARIP": row[6] !== undefined ? row[6] : "",
+                        "DAYA": row[7] !== undefined ? row[7] : "",
+                        "KWH": row[8] !== undefined ? row[8] : "",
+                        "RP KWH": row[9] !== undefined ? row[9] : "",
+                        "RP BEBAN": row[10] !== undefined ? row[10] : "",
+                        "RP TS": row[11] !== undefined ? row[11] : "",
+                        "RP METERAI": row[12] !== undefined ? row[12] : "",
+                        "SEGEL": row[13] !== undefined ? row[13] : "",
+                        "RP MATERIAL": row[14] !== undefined ? row[14] : "",
+                        "TOTAL P2TL": row[15] !== undefined ? row[15] : "",
+                        "TUNAI": row[16] !== undefined ? row[16] : "",
+                        "RP TOTAL ANGSUR": row[17] !== undefined ? row[17] : "",
+                        "TGL REGISTER": row[18] !== undefined ? row[18] : "",
+                        "NO SIP": row[19] !== undefined ? row[19] : "",
+                        "TGL SPH": row[20] !== undefined ? row[20] : "",
+                        "NO SPH": row[21] !== undefined ? row[21] : "",
+                        "RP PPJ": row[22] !== undefined ? row[22] : "",
+                        "RP UJL": row[23] !== undefined ? row[23] : "",
+                        "RP PPN": row[24] !== undefined ? row[24] : ""
+                    };
+                });
+
+                if (confirm(`Membaca ${formattedData.length} baris dari file Excel. Lanjutkan proses sinkronisasi database?`)) {
+                    sendExcelDataToBackend(formattedData);
+                }
+                
+                event.target.value = "";
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function sendExcelDataToBackend(dataRows) {
+            if (typeof toggleLoading === 'function') toggleLoading(true);
+
+            fetch(WEB_APP_URL, {
+                method: "POST",
+                body: JSON.stringify(dataRows),
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8"
+                }
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (typeof toggleLoading === 'function') toggleLoading(false);
+                
+                if (result.status === "success") {
+                    alert(`Data berhasil di upload dengan jumlah baris ${result.insertedCount}`);
+                    location.reload();
+                } else {
+                    alert("Gagal: " + result.message);
+                }
+            })
+            .catch(error => {
+                if (typeof toggleLoading === 'function') toggleLoading(false);
+                console.error("Error:", error);
+                alert("Terjadi kesalahan koneksi saat mengunggah data.");
+            });
+        }
+    </script>
+</body>
+</html>
